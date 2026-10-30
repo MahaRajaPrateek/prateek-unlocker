@@ -2,6 +2,11 @@
 # Prateek Unlocker v2.0 - Xiaomi/Redmi/POCO bootloader unlock + ROM flash helper for Termux
 # Uses official Xiaomi account authorization via MiUnlockTool (github.com/MiForge/MiUnlockTool)
 # and termux-adb / termux-fastboot (github.com/nohajc/termux-adb). Needs 2 phones + OTG / C-to-C cable.
+
+# --- self-install: type "prateek" anywhere in Termux to open this tool ---
+if [ -n "$PREFIX" ] && [ -d "$PREFIX/bin" ] && [ "$(realpath "$0" 2>/dev/null)" != "$PREFIX/bin/prateek" ]; then
+  cp "$0" "$PREFIX/bin/prateek" 2>/dev/null && chmod +x "$PREFIX/bin/prateek" && echo -e "\033[1;32m[OK] Ab Termux mein kabhi bhi sirf 'prateek' likh ke tool khol sakte ho\033[0m" && sleep 2
+fi
 R='\033[1;31m'; G='\033[1;32m'; Y='\033[1;33m'; C='\033[1;36m'; N='\033[0m'
 banner(){ clear; echo -e "${C}"
 echo " ____            _            _    "
