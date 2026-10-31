@@ -1,0 +1,14 @@
+<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Prateek Unlocker v1.0 — JARVIS RUN</title><meta property="og:title" content="Prateek Unlocker v1.0 — JARVIS RUN"><meta property="og:description" content="Termux tool: Xiaomi/Redmi/POCO bootloader unlock + custom ROM flash. Redmi Note 14 5G (beryl) bina recovery: AUTO / payload.bin / GSI / Lunaris-LineageOS official steps.">
+<body style="background:#111;color:#eee;font-family:monospace;padding:20px;max-width:720px">
+<h2 style="color:#f33">Prateek Unlocker v1.0</h2>
+<p>Bootloader unlock + ROM flasher (Xiaomi / Redmi / POCO). Redmi Note 14 5G (beryl) pe <b>recovery ke bina</b> custom ROM: AUTO / payload.bin / ROM ki recovery / GSI.</p>
+<p style="background:#2a1a00;border-left:3px solid #fc3;padding:8px"><b>Naya [14]: Lunaris / LineageOS (beryl) – official steps.</b> vendor_boot dono slot → normal reboot + <b>Volume Up</b> se recovery → Format data → firmware zip → ROM zip → GApps. <span style="color:#f66">beryl pe <code>fastboot reboot recovery</code> kabhi nahi (brick risk) — tool ye command nahi bhejta.</span> Sirf HyperOS 3 se flash karo.</p>
+<p>Termux mein install:</p>
+<pre style="white-space:pre-wrap;background:#222;padding:10px">curl -sL https://raw.githubusercontent.com/MahaRajaPrateek/prateek-unlocker/main/unlock.sh -o unlock.sh && bash unlock.sh</pre>
+<p>Phir kabhi bhi likho:</p>
+<pre style="background:#222;padding:10px;color:#fc3">JARVIS RUN      # tool kholo (Iron Man intro + sound)
+JARVIS TEST     # demo mode, koi phone flash nahi hoga
+JARVIS RUN --fast   # intro skip</pre>
+<p><a style="color:#6cf" href="README.md">README</a> · <a style="color:#6cf" href="unlock.sh">unlock.sh</a> · <a style="color:#6cf" href="https://github.com/MahaRajaPrateek/prateek-unlocker">GitHub</a></p>
+<p style="color:#999">Abhi kisi real phone pe test nahi hua. Apne risk pe, backup leke use karo.</p>
+</body>
