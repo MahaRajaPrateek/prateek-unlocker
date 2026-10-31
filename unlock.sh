@@ -1,6 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Prateek Unlocker v1.0 - Xiaomi/Redmi/POCO bootloader unlock + ROM flash helper for Termux
 # v1.0: recovery-less custom ROM flashing for Redmi Note 14 5G (beryl): payload.bin, ROM's own recovery + sideload, GSI
+# v1.0: beryl safe reboot (kabhi 'fastboot reboot recovery' nahi) + LunarisAOSP / LineageOS official-steps mode [14]
 # Uses official Xiaomi account authorization via MiUnlockTool (github.com/MiForge/MiUnlockTool)
 # and termux-adb / termux-fastboot (github.com/nohajc/termux-adb). Needs 2 phones + OTG / C-to-C cable.
 
@@ -201,16 +202,18 @@ flash_img(){ # [9] boot/recovery image
   wait_fastboot || { pause; return; }
   fb_unlocked_check || { pause; return; }
   if is_beryl "$FBPROD" && [ "$part" = "recovery" ]; then beryl_note; echo -e "${R}[-] beryl pe 'recovery' partition hai hi nahi. Option 12 use karo.${N}"; pause; return; fi
+  [ "$part" != "TEMP" ] && { img_check "$part" "$img" || { pause; return; }; }
   read -rp "Ye image sach mein '$FBPROD' phone ke liye bani hai? (yes likho): " ok
   [ "$ok" = "yes" ] || { echo -e "${Y}[*] Cancel. Sahi codename wali image lo.${N}"; pause; return; }
   if [ "$part" = "TEMP" ]; then
     termux-fastboot boot "$img" && echo -e "${G}[+] Image temporary boot ho rahi hai (reboot pe purana wapas).${N}" || echo -e "${R}[-] Boot fail. Image is phone ki nahi hai ya cable/permission ki dikkat. Phone fastboot mein hi rehne do.${N}"; pause; return
   fi
   flash_warn "$(basename "$img") -> $part partition ($FBPROD)" || { pause; return; }
-  termux-fastboot flash "$part" "$img" && echo -e "${G}[+] $part flash ho gaya!${N}" || { echo -e "${R}[-] Flash fail. Aage kuch nahi kiya. Phone fastboot mein hi rehne do, cable/image check karke dobara try karo.${N}"; pause; return; }
+  local slotarg=""; if is_beryl "$FBPROD" && [ "$part" = "vendor_boot" ]; then slotarg="--slot=all"; echo -e "${C}[i] beryl: vendor_boot dono slot (a+b) pe flash hoga (--slot=all)${N}"; fi
+  fb $slotarg flash "$part" "$img" && echo -e "${G}[+] $part flash ho gaya!${N}" || { echo -e "${R}[-] Flash fail. Aage kuch nahi kiya. Phone fastboot mein hi rehne do, cable/image check karke dobara try karo.${N}"; pause; return; }
   if [ "$part" = "recovery" ] || [ "$part" = "vendor_boot" ]; then
-    read -rp "Abhi recovery mein reboot karein? (y/n): " r
-    [ "$r" = "y" ] && { termux-fastboot reboot recovery 2>/dev/null || termux-fastboot reboot; }
+    read -rp "Abhi recovery mein jaana hai? (y/n): " r
+    [ "$r" = "y" ] && reboot_to_recovery_safe "$part"
   fi; pause; }
 
 # ---------------- Note 14 5G: Redmi Note 14 5G (beryl) - recovery ke bina custom ROM ----------------
@@ -226,7 +229,27 @@ beryl_note(){
   echo -e "${Y}[i] Redmi Note 14 5G (beryl) ke liye OrangeFox/TWRP available NAHI hai.${N}"
   echo -e "${Y}    Is phone pe recovery partition bhi nahi hai (recovery vendor_boot mein hoti hai).${N}"
   echo -e "${Y}    Recovery ke bina flash ke liye: ${G}[10]${Y} AUTO, ${G}[11]${Y} payload.bin, ${G}[12]${Y} ROM ki apni recovery, ${G}[13]${Y} GSI${N}"
+  echo -e "${Y}    LunarisAOSP / LineageOS (official steps): ${G}[14]${N}"
+  echo -e "${R}    [!] beryl pe 'fastboot reboot recovery' KABHI nahi - reboot ke baad Volume Up se recovery.${N}"
   echo -e "${Y}-----------------------------------------------------${N}"; }
+volup_box(){ # beryl: recovery mein jaane ka SAFE tarika (Volume Up), 'fastboot reboot recovery' nahi
+  echo -e "${R}#####################################################${N}"
+  echo -e "${R}#  ${Y}Phone reboot hote hi turant VOLUME UP daba ke rakho${R}  #${N}"
+  echo -e "${R}#  ${Y}        --> recovery khulegi${R}                         #${N}"
+  echo -e "${R}#####################################################${N}"
+  echo -e "${Y}  Recovery ki screen aane tak Vol Up mat chhodo.${N}"
+  echo -e "${Y}  Miss ho gaya aur phone normal boot ho gaya? Phone band karo, phir Power + Volume Up saath dabao.${N}"
+  echo -e "${R}  [!] 'fastboot reboot recovery' beryl ko BRICK kar sakta hai - ye tool wo command kabhi nahi bhejta.${N}"; }
+reboot_to_recovery_safe(){ # $1 = flash ki gayi partition. beryl / vendor_boot: sirf 'fastboot reboot' + Vol Up
+  if is_beryl "$FBPROD" || [ "$1" = "vendor_boot" ]; then
+    volup_box
+    read -rp "Target phone pe Volume Up pakad lo, phir Enter dabao (reboot bhejenge)..." _
+    fb reboot || { fail "reboot fail" "Phone ko Power button se restart karo aur turant Volume Up daba ke rakho."; return 1; }
+    [ -n "$TEST" ] && fake_state recovery # TEST: Vol Up se recovery khuli (nakli)
+    echo -e "${Y}[*] Reboot bheja. VOLUME UP dabaye rakho jab tak recovery na dikhe!${N}"
+  else
+    fb reboot recovery || fb reboot
+  fi; }
 log(){ echo "[$(date '+%F %T')] $*" >> "$LOG"; }
 fail(){ # $1 = kya fail hua, $2 = hint
   echo -e "${R}=====================================================${N}"
@@ -432,6 +455,7 @@ do_sideload(){ # $1 = zip. Phone recovery ke ADB sideload mode mein ho
   log "adb sideload $1"
   termux-adb sideload "$1" 2>&1 | tee -a "$LOG"; local rc=${PIPESTATUS[0]}
   [ "$rc" = "0" ] || { fail "Sideload error ke saath ruka (code $rc)" "Phone ki screen pe error padho. Phone recovery mein hai - wahi se dobara 'Apply from ADB' karke same option chalao."; return 1; }
+  [ -n "$2" ] && { echo -e "${G}[+] Sideload poora: $(basename "$1")${N}"; return 0; }
   echo -e "${G}[+] Sideload poora! Phone ki screen pe result dekho, phir 'Reboot system now'.${N}"; }
 rec_part_for(){ # file name -> partition
   local b; b=$(basename "$1" | tr 'A-Z' 'a-z')
@@ -495,17 +519,22 @@ flash_rom_recovery(){ # [12] Path B: ROM ki apni recovery images -> fastboot, ph
     img_check "$p" "$f" || { pause; return; }
   done <<< "$list"
   echo -e "${C}------------- PLAN -------------${N}"
-  echo -e " Images (${REC_SRC}) -> fastboot (current slot):"
+  local slotarg=""; is_beryl "$FBPROD" && slotarg="--slot=all"
+  echo -e " Images (${REC_SRC}) -> fastboot ($([ -n "$slotarg" ] && echo "dono slot" || echo "current slot")):"
   echo "$list" | while IFS='|' read -r p f; do [ -n "$p" ] && echo -e "   ${G}$p${N} <- $(basename "$f")"; done
-  echo -e " Phir: reboot recovery -> (Format data) -> ADB sideload $(basename "$zip")"
+  [ -n "$slotarg" ] && echo -e "   (beryl: dono slot a+b, --slot=all)"
+  if is_beryl "$FBPROD" || echo "$list" | grep -q '^vendor_boot|'; then echo -e " Phir: normal reboot + Volume Up se recovery -> (Format data) -> ADB sideload $(basename "$zip")"
+  else echo -e " Phir: reboot recovery -> (Format data) -> ADB sideload $(basename "$zip")"; fi
+  is_beryl "$FBPROD" && echo -e "${Y} LunarisAOSP / LineageOS ho to option ${G}[14]${Y} better hai (firmware zip bhi daalta hai).${N}"
   echo -e "${C}--------------------------------${N}"
   flash_warn "ROM recovery images + sideload: $(basename "$zip") -> $FBPROD" || { pause; return; }
   while IFS='|' read -r p f; do [ -n "$p" ] || continue
     echo -e "${Y}[*] $p flash...${N}"
-    fb flash "$p" "$f" || { fail "$p flash fail" "Phone abhi fastboot mein hai - restart mat karo. Cable dobara laga ke same option phir chalao."; pause; return; }
+    fb $slotarg flash "$p" "$f" || { fail "$p flash fail" "Phone abhi fastboot mein hai - restart mat karo. Cable dobara laga ke same option phir chalao."; pause; return; }
   done <<< "$list"
-  echo -e "${Y}[*] ROM ki recovery mein reboot...${N}"
-  fb reboot recovery || { fail "reboot recovery fail" "Images flash ho gayi hain. Phone ko Power + Vol Up se recovery mein daalo, phir neeche wale steps."; }
+  echo -e "${Y}[*] ROM ki recovery mein jaana hai...${N}"
+  local rp=recovery; echo "$list" | grep -q '^vendor_boot|' && rp=vendor_boot
+  reboot_to_recovery_safe "$rp" || echo -e "${Y}[>] Images flash ho gayi hain. Phone ko khud recovery mein daalo (Power + Vol Up), phir neeche wale steps.${N}"
   echo -e "${C}Ab target phone pe (ROM ki recovery mein):${N}"
   echo -e " 1. ${R}Clean flash / stock se aa rahe ho:${N} 'Factory reset' > 'Format data / factory reset' (SARA DATA DELETE)"
   echo -e " 2. 'Apply update' > 'Apply from ADB'"
@@ -577,6 +606,99 @@ flash_gsi(){ # [13] Path C: GSI
   fb reboot || { fail "reboot fail" "GSI flash ho gaya, phone khud restart karo."; pause; return; }
   echo -e "${G}[+] GSI flash poora! Pehla boot lamba ho sakta hai. Bootloop ho to: fastboot mein jaake Format data karo, ya option 8 se stock ROM wapas.${N}"; pause; }
 
+flash_lunaris(){ # [14] LunarisAOSP / LineageOS (beryl) - ROM ke official 9 steps, bina 'fastboot reboot recovery'
+  echo -e "${C}== Lunaris / LineageOS (Redmi Note 14 5G beryl) - official steps ==${N}"
+  need_tools || { pause; return; }; need_storage || { pause; return; }
+  echo -e "${R}=====================================================${N}"
+  echo -e "${R}[!] Sirf HyperOS 3 se flash karo (ROM ke official notes). Purane HyperOS/MIUI se = bootloop/brick ka risk.${N}"
+  echo -e "${R}[!] beryl pe 'fastboot reboot recovery' KABHI nahi - tool sirf normal reboot karega, tum Volume Up se recovery khologe.${N}"
+  echo -e "${R}=====================================================${N}"
+  read -rp "Target phone abhi HyperOS 3 pe hai? (yes likho): " a
+  [ "$a" = "yes" ] || { echo -e "${Y}[*] Cancel. Pehle phone ko HyperOS 3 pe update karo, phir aao.${N}"; pause; return; }
+  echo -e "${C}Step A: vendor_boot.img chuno (ROM ke download page wali)${N}"
+  pick_file "*vendor_boot*.img" || { pause; return; }; local vb="$PICKED"
+  echo -e "${C}Step B: firmware zip chuno (fw_beryl_global_xxxx.zip)${N}"
+  pick_file "fw_*.zip" || { pause; return; }; local fw="$PICKED"
+  echo -e "${C}Step C: ROM zip chuno (LunarisAOSP / LineageOS)${N}"
+  pick_file "*.zip" || { pause; return; }; local rom="$PICKED"
+  local gapps=""
+  read -rp "GApps (MindTheGapps) bhi daalna hai? (y/n): " a
+  if [ "$a" = "y" ]; then echo -e "${C}Step D: GApps zip chuno${N}"; pick_file "*[Gg]app*.zip" || { pause; return; }; gapps="$PICKED"; fi
+  # --- file checks (abhi tak phone ko kuch nahi hua) ---
+  : > "$LOG"; log "Lunaris mode: vb=$vb fw=$fw rom=$rom gapps=$gapps"
+  local f; for f in "$vb" "$fw" "$rom" $gapps; do
+    [ -r "$f" ] && [ -s "$f" ] || { fail "$(basename "$f") khali hai ya padh nahi pa rahe" "File dobara download karo (Download folder mein). Phone ko kuch nahi hua."; pause; return; }
+  done
+  img_check vendor_boot "$vb" || { pause; return; }
+  [ "$rom" != "$fw" ] && [ "$rom" != "$gapps" ] || { fail "ROM zip aur firmware/GApps zip same file chun li" "Step C mein ROM wali zip (Lunaris/Lineage) chuno."; pause; return; }
+  case "$(basename "$rom")" in fw_*) fail "ROM ki jagah firmware zip chun li" "Step C mein ROM zip chuno, fw_ wali nahi."; pause; return;; esac
+  for f in "$fw" "$rom" $gapps; do
+    unzip -l "$f" >/dev/null 2>&1 || { fail "$(basename "$f") valid zip nahi hai (adhoori download?)" "Dobara download karo. Phone ko kuch nahi hua."; pause; return; }
+  done
+  zip_has "$rom" payload.bin || zip_has "$rom" META-INF/com/google/android/update-binary || { fail "$(basename "$rom") ROM zip nahi lagti (payload.bin / update-binary nahi)" "Sahi ROM zip download karo."; pause; return; }
+  local want; want=$(zip_device "$rom")
+  # --- phone: fastboot + unlocked + codename ---
+  goto_bootloader || { pause; return; }
+  case "$FBPROD" in beryl*|citrine*) ;; *) fail "Ye mode sirf Redmi Note 14 5G (beryl/citrine) ke liye hai, phone '$FBPROD' hai" "Is phone ke liye uske apne ROM ke steps follow karo."; pause; return;; esac
+  codename_gate "$want" "$FBPROD" || { pause; return; }
+  local fwn; fwn=$(basename "$fw" | tr 'A-Z' 'a-z')
+  if [[ "$fwn" == *beryl* || "$fwn" == *citrine* ]]; then
+    [[ "$fwn" == *"${FBPROD%%_*}"* ]] || { fail "Firmware '$(basename "$fw")' dusre codename ka hai, phone '$FBPROD' hai" "Phone ke codename wali fw_${FBPROD%%_*}_... zip lo."; pause; return; }
+  else
+    echo -e "${Y}[?] Firmware zip ke naam mein beryl/citrine nahi likha.${N}"
+    read -rp "Pakka ye '$FBPROD' ka firmware hai? (yes likho): " a; [ "$a" = "yes" ] || { echo -e "${Y}[*] Cancel.${N}"; pause; return; }
+  fi
+  echo -e "${C}------------- PLAN (ROM ke official steps) -------------${N}"
+  echo -e " 1) fastboot flash vendor_boot ${G}--slot=all${N} <- $(basename "$vb")"
+  echo -e " 2) fastboot reboot  ${R}(reboot recovery NAHI)${N}"
+  echo -e " 3) Reboot hote hi tum ${Y}Volume Up${N} daba ke rakhoge -> recovery"
+  echo -e " 4) Recovery mein ${R}Format Data${N} (SARA DATA DELETE)"
+  echo -e " 5) adb sideload ${G}$(basename "$fw")${N} (firmware)"
+  echo -e " 6) adb sideload ${G}$(basename "$rom")${N} (ROM)"
+  echo -e " 7) Recovery 'reboot to recovery?' puchhe to ${G}Yes${N}"
+  echo -e " 8) GApps: $([ -n "$gapps" ] && echo "${G}$(basename "$gapps")${N}" || echo "nahi")"
+  echo -e " 9) Reboot system"
+  echo -e "${C}--------------------------------------------------------${N}"
+  flash_warn "LunarisAOSP/LineageOS: $(basename "$rom") -> $FBPROD" || { pause; return; }
+  echo -e "${R}[!] Step 4 mein Format Data se phone ka SARA DATA (photos, apps, sab) DELETE hoga.${N}"
+  read -rp "Samajh gaye? Aage badhne ke liye FORMAT likho: " a
+  [ "$a" = "FORMAT" ] || { echo -e "${Y}[*] Cancel. Phone ko kuch nahi hua.${N}"; pause; return; }
+  # 1) vendor_boot dono slot
+  echo -e "${Y}[1/9] vendor_boot flash (dono slot)...${N}"
+  fb --slot=all flash vendor_boot "$vb" || { fail "vendor_boot flash fail" "Phone abhi fastboot mein hai - restart mat karo. Cable dobara laga ke option 14 phir chalao."; pause; return; }
+  # 2-3) normal reboot + Vol Up
+  echo -e "${Y}[2/9] Normal reboot (fastboot reboot)...${N}"
+  volup_box
+  read -rp "Target phone pe Volume Up pakad lo, phir Enter dabao (reboot bhejenge)..." _
+  fb reboot || { fail "reboot fail" "vendor_boot flash ho chuka hai. Phone ko Power button se restart karo aur turant Volume Up daba ke rakho, phir 'recovery' wale steps khud karo."; pause; return; }
+  [ -n "$TEST" ] && fake_state recovery
+  echo -e "${Y}[3/9] VOLUME UP dabaye rakho jab tak recovery na dikhe!${N}"
+  read -rp "Recovery khul gayi? Enter dabao..." _
+  # 4) Format data
+  echo -e "${C}[4/9] Recovery mein: 'Factory reset' > 'Format data / factory reset' > confirm${N}"
+  read -rp "Format data ho gaya? 'done' likho: " a
+  [ "$a" = "done" ] || { fail "Format data confirm nahi hua" "Recovery mein Format Data karke option 14 phir chalao (vendor_boot dobara flash karna safe hai)."; pause; return; }
+  # 5) firmware
+  lun_sideload 5 "firmware" "$fw" || { pause; return; }
+  # 6) ROM
+  lun_sideload 6 "ROM" "$rom" || { pause; return; }
+  # 7) reboot to recovery prompt (recovery khud puchhti hai - ye safe hai, fastboot command nahi)
+  echo -e "${C}[7/9] Recovery 'Reboot to recovery?' / 'install add-ons ke liye reboot?' puchhe to: ${G}Yes${N}"
+  if [ -n "$gapps" ]; then
+    read -rp "Recovery dobara khul gayi? Enter dabao..." _
+    lun_sideload 8 "GApps" "$gapps" || { pause; return; }
+  else echo -e "${Y}[8/9] GApps skip.${N}"; fi
+  echo -e "${C}[9/9] Recovery mein: 'Reboot system now'${N}"
+  echo -e "${G}[+] Sab steps poore! Pehla boot 5-15 min le sakta hai, wait karo.${N}"; log "Lunaris mode done"; pause; }
+lun_sideload(){ # $1 step no, $2 naam, $3 zip. Har sideload se pehle 'Apply from ADB', fail pe ruk jao
+  echo -e "${C}[$1/9] $2 sideload: recovery mein 'Apply update' > 'Apply from ADB' chuno${N}"
+  read -rp "Phone pe 'Apply from ADB' on ho gaya? Enter dabao..." _
+  do_sideload "$3" quiet && return 0
+  echo -e "${Y}[?] adb ne error diya. Kabhi kabhi '47%' / 'failed to read command: Success' pe bhi install ho jata hai.${N}"
+  read -rp "Phone ki screen pe 'Install completed with status 0' / success dikh raha hai? (haan likho, warna Enter = ruko): " a
+  [ "$a" = "haan" ] && { log "sideload $2: adb rc!=0 par user ne screen pe success confirm kiya"; return 0; }
+  fail "$2 sideload fail" "Phone recovery mein hi rehne do. Cable check karke option 14 dobara chalao (ya recovery se 'Apply from ADB' karke tool ka option 7 se sirf ye zip)."; return 1; }
+
 auto_flash(){ # [10] AUTO: ROM zip dekh ke khud raasta chunta hai
   echo -e "${C}== AUTO Custom ROM Flash (Redmi Note 14 5G / beryl) ==${N}"
   pick_zip || { pause; return; }
@@ -589,6 +711,7 @@ auto_flash(){ # [10] AUTO: ROM zip dekh ke khud raasta chunta hai
     echo "$REC_LIST" | while IFS='|' read -r p f; do [ -n "$p" ] || continue
       if [[ "$f" == zip:* ]]; then echo -e "      $p <- ${f#zip:} (zip ke andar)"; else echo -e "      $p <- $(basename "$f") ($(date -r "$f" '+%d %b %Y' 2>/dev/null))"; fi; done
     echo -e "    ROM ki apni recovery se install = ROM developer ka official tarika."
+    echo -e "${Y}    LunarisAOSP / LineageOS (beryl) hai? Unke steps mein firmware zip bhi hai - option ${G}[14]${Y} use karo (agle 'yes' pe kuch aur likh ke cancel karo, phir menu se 14).${N}"
     [ "$REC_SRC" = folder ] && echo -e "${Y}    Dhyan: ye images ISI ROM build ki honi chahiye. Purani/dusre ROM ki .img Download se hata do, warna 'yes' mat likhna.${N}"
     flash_rom_recovery auto; return
   fi
@@ -618,6 +741,9 @@ ${C}Redmi Note 14 5G (beryl) - TWRP/OrangeFox nahi hai:${N}
 - [11] payload.bin: images nikaal ke fastboot + fastbootd se flash (recovery nahi chahiye)
 - [12] ROM ki apni recovery (boot/vendor_boot/dtbo) flash karke ZIP sideload
 - [13] GSI: vbmeta disable + system.img flash
+- [14] LunarisAOSP / LineageOS: ROM ke official steps (vendor_boot dono slot -> normal reboot + Vol Up -> Format data -> firmware zip -> ROM zip -> GApps)
+- beryl pe 'fastboot reboot recovery' KABHI mat chalao (brick ho sakta hai). Reboot ke baad Volume Up daba ke recovery kholo.
+- Lunaris/LineageOS sirf HyperOS 3 se flash karo
 - Har flash ka log: ~/prateek_flash.log
 - Xiaomi stock fastboot ROM (.tgz): Menu 8
 - Phone ko fastboot/recovery mein daalna aur cable lagana aapko khud karna hai
@@ -632,6 +758,7 @@ fake_flashfail(){ # Fake error ON ho to 2nd flash fail karo (taaki dikhe ki tool
   [ $n -ge 2 ]; }
 if [ -n "$TEST" ]; then
 termux-fastboot(){
+  echo "fastboot $*" >> "$TD/.fbcalls" # TEST: har nakli fastboot command ka log (reboot recovery check ke liye)
   local st; st=$(fake_get)
   while [[ "$1" == --* ]]; do shift; done
   if [ "$st" != bootloader ] && [ "$st" != fastbootd ]; then echo "< waiting for any device >" >&2; sleep 0.3; return 1; fi
@@ -661,13 +788,14 @@ termux-fastboot(){
     *) sleep 0.2; echo "[TEST] $* OKAY" >&2;;
   esac; return 0; }
 termux-adb(){
+  echo "adb $*" >> "$TD/.fbcalls"
   case "$1" in
     get-state) case "$(fake_get)" in recovery) echo sideload;; system) echo device;; *) echo unknown; return 1;; esac;;
     shell) echo beryl;;
     devices) echo -e "List of devices attached\nTEST1234beryl\tsideload";;
     sideload) local i; for i in 10 30 47 70 100; do sleep 0.4; echo "[TEST] serving: '$(basename "$2")'  (~$i%)"; done
       if [ -n "$FAKE_ERR" ]; then echo "[TEST] adb: failed to read command: Success (fake error)"; return 1; fi
-      echo "[TEST] Total xfer: 1.00x"; fake_state system;;
+      echo "[TEST] Total xfer: 1.00x"; fake_state recovery;; # asli phone sideload ke baad recovery mein hi rehta hai
     reboot) fake_state "${2:-system}"; echo "[TEST] reboot OKAY";;
     *) echo "[TEST] adb $* OKAY";;
   esac; return 0; }
@@ -698,7 +826,7 @@ miunlock(){ echo -e "${Y}[TEST] Mi account login (nakli)...${N}"; sleep 0.6; ech
   echo "[TEST] Unlock token mila"; sleep 0.4; echo -e "${G}[TEST] Unlock OKAY (asli mein phone ka data delete hota)${N}"; return 0; }
 termux-setup-storage(){ echo "[TEST] storage OK"; }
 make_test_files(){ # dummy ROMs: ek payload.bin wala, ek recovery images wala
-  mkdir -p "$TD" || return 1; fake_state bootloader
+  mkdir -p "$TD" || return 1; fake_state bootloader; : > "$TD/.fbcalls"
   base64 -d > "$TD/TEST-payload-rom-beryl.zip" <<'B64'
 UEsDBBQAAAAIAGu5Xl1h3L3mVAAAAFwAAAAdAAAATUVUQS1JTkYvY29tL2FuZHJvaWQvbWV0YWRhdGHLL0nULaksSLV1dOIqyC8u0U0qzcxJsQ1xDQ7Rz0osKsssjk9KLarM0QeTVoam+mApQ6vS4tQi/aLUnNTE4lTd7NTKYq6ColTdlNSyzORUW7BiLgBQSwMEFAAAAAgAa7leXYX/ZBgVAAAAEwAAACkAAABNRVRBLUlORi9jb20vZ29vZ2xlL2FuZHJvaWQvdXBkYXRlLWJpbmFyeVNW1C9OyszTL87gUlZIKc3NreQCAFBLAwQUAAAACABruV5dQJlaRxsAAAAAEAAACwAAAHBheWxvYWQuYmlu7cFBDQAACAQgqzkzXBH7P+zhgNlOAQAAAK8dUEsDBBQAAAAIAGu5Xl1wzgDVEQAAAA8AAAAWAAAAcGF5bG9hZF9wcm9wZXJ0aWVzLnR4dHPz9HGN93AM9rANcQ0O4QIAUEsBAhQDFAAAAAgAa7leXWHcveZUAAAAXAAAAB0AAAAAAAAAAAAAAIABAAAAAE1FVEEtSU5GL2NvbS9hbmRyb2lkL21ldGFkYXRhUEsBAhQDFAAAAAgAa7leXYX/ZBgVAAAAEwAAACkAAAAAAAAAAAAAAIABjwAAAE1FVEEtSU5GL2NvbS9nb29nbGUvYW5kcm9pZC91cGRhdGUtYmluYXJ5UEsBAhQDFAAAAAgAa7leXUCZWkcbAAAAABAAAAsAAAAAAAAAAAAAAIAB6wAAAHBheWxvYWQuYmluUEsBAhQDFAAAAAgAa7leXXDOANURAAAADwAAABYAAAAAAAAAAAAAAIABLwEAAHBheWxvYWRfcHJvcGVydGllcy50eHRQSwUGAAAAAAQABAAfAQAAdAEAAAAA
 B64
@@ -708,10 +836,16 @@ B64
   head -c 4096 /dev/zero > "$TD/TEST-gsi-system.img"; printf '\x53\xef' | dd of="$TD/TEST-gsi-system.img" bs=1 seek=1080 conv=notrunc 2>/dev/null
   rm -f "$TD/TEST-gsi-system.img.xz" 2>/dev/null
   rm -f "$TD/TEST-boot.img"
+  # Lunaris mode [14] ke dummy: vendor_boot + firmware + ROM + GApps
+  { printf 'VNDRBOOT'; head -c 4088 /dev/zero; } > "$TD/beryl-lunaris-vendor_boot.img"
+  cp -f "$TD/TEST-recovery-rom-beryl.zip" "$TD/fw_beryl_global_TEST.zip"
+  cp -f "$TD/TEST-payload-rom-beryl.zip" "$TD/LunarisAOSP-3.12-beryl-TEST.zip"
+  cp -f "$TD/TEST-payload-rom-beryl.zip" "$TD/MindTheGapps-16-arm64-TEST.zip"
   echo -e "${G}[TEST] Dummy files ready: ~/jarvis-test/${N}"
   echo -e "  ${C}TEST-payload-rom-beryl.zip${N}  -> AUTO payload.bin (11) chunega"
   echo -e "  ${C}TEST-recovery-rom-beryl.zip${N} -> AUTO ROM ki recovery (12) chunega"
-  echo -e "  ${C}TEST-gsi-system.img${N}         -> GSI (13)"; }
+  echo -e "  ${C}TEST-gsi-system.img${N}         -> GSI (13)"
+  echo -e "  ${C}beryl-lunaris-vendor_boot.img + fw_beryl_global_TEST.zip + LunarisAOSP-3.12-beryl-TEST.zip + MindTheGapps${N} -> Lunaris (14)"; }
 fi
 
 # ================= Iron Man / J.A.R.V.I.S intro =================
@@ -784,9 +918,10 @@ echo -e " ${G}[10]${N} AUTO Custom ROM Flash (Note 14 5G)"
 echo -e " ${G}[11]${N} ROM ZIP flash bina recovery (payload.bin)"
 echo -e " ${G}[12]${N} ROM ki apni recovery + sideload"
 echo -e " ${G}[13]${N} GSI flash (system.img)"
+echo -e " ${G}[14]${N} Lunaris / LineageOS (beryl) - official steps"
 [ -n "$TEST" ] && echo -e " ${Y}[E]${N} Fake error: $([ -n "$FAKE_ERR" ] && echo "${R}ON${N} (OFF karne ke liye E)" || echo "${G}OFF${N} (ON karne ke liye E)")"
 echo -e " ${R}[0]${N} Exit"
 read -rp $'\n Choose: ' c
 if [ -n "$TEST" ] && [ "${c,,}" = "e" ]; then [ -n "$FAKE_ERR" ] && FAKE_ERR="" || FAKE_ERR=1; continue; fi
-case $c in 1) setup;; 2) check;; 3) unlock;; 4) lockcheck;; 5) reboot_;; 6) help_;; 7) flash_zip;; 8) flash_fastboot_rom;; 9) flash_img;; 10) auto_flash;; 11) flash_payload;; 12) flash_rom_recovery;; 13) flash_gsi;; 0) exit 0;; *) ;; esac
+case $c in 1) setup;; 2) check;; 3) unlock;; 4) lockcheck;; 5) reboot_;; 6) help_;; 7) flash_zip;; 8) flash_fastboot_rom;; 9) flash_img;; 10) auto_flash;; 11) flash_payload;; 12) flash_rom_recovery;; 13) flash_gsi;; 14) flash_lunaris;; 0) exit 0;; *) ;; esac
 done
