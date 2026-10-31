@@ -229,7 +229,7 @@ beryl_note(){
   echo -e "${Y}[i] Redmi Note 14 5G (beryl) ke liye OrangeFox/TWRP available NAHI hai.${N}"
   echo -e "${Y}    Is phone pe recovery partition bhi nahi hai (recovery vendor_boot mein hoti hai).${N}"
   echo -e "${Y}    Recovery ke bina flash ke liye: ${G}[10]${Y} AUTO, ${G}[11]${Y} payload.bin, ${G}[12]${Y} ROM ki apni recovery, ${G}[13]${Y} GSI${N}"
-  echo -e "${Y}    LunarisAOSP / LineageOS (official steps): ${G}[14]${N}"
+  echo -e "${Y}    Lunaris / LineageOS ROM FLASH (Recovery se): ${G}[14]${N}"
   echo -e "${R}    [!] beryl pe 'fastboot reboot recovery' KABHI nahi - reboot ke baad Volume Up se recovery.${N}"
   echo -e "${Y}-----------------------------------------------------${N}"; }
 volup_box(){ # beryl: recovery mein jaane ka SAFE tarika (Volume Up), 'fastboot reboot recovery' nahi
@@ -607,7 +607,7 @@ flash_gsi(){ # [13] Path C: GSI
   echo -e "${G}[+] GSI flash poora! Pehla boot lamba ho sakta hai. Bootloop ho to: fastboot mein jaake Format data karo, ya option 8 se stock ROM wapas.${N}"; pause; }
 
 flash_lunaris(){ # [14] LunarisAOSP / LineageOS (beryl) - ROM ke official 9 steps, bina 'fastboot reboot recovery'
-  echo -e "${C}== Lunaris / LineageOS (Redmi Note 14 5G beryl) - official steps ==${N}"
+  echo -e "${C}== Lunaris / LineageOS ROM FLASH (Recovery se) - Redmi Note 14 5G ==${N}"
   need_tools || { pause; return; }; need_storage || { pause; return; }
   echo -e "${R}=====================================================${N}"
   echo -e "${R}[!] Sirf HyperOS 3 se flash karo (ROM ke official notes). Purane HyperOS/MIUI se = bootloop/brick ka risk.${N}"
@@ -741,7 +741,7 @@ ${C}Redmi Note 14 5G (beryl) - TWRP/OrangeFox nahi hai:${N}
 - [11] payload.bin: images nikaal ke fastboot + fastbootd se flash (recovery nahi chahiye)
 - [12] ROM ki apni recovery (boot/vendor_boot/dtbo) flash karke ZIP sideload
 - [13] GSI: vbmeta disable + system.img flash
-- [14] LunarisAOSP / LineageOS: ROM ke official steps (vendor_boot dono slot -> normal reboot + Vol Up -> Format data -> firmware zip -> ROM zip -> GApps)
+- [14] Lunaris / LineageOS ROM FLASH (Recovery se): ROM ke official steps (vendor_boot dono slot -> normal reboot + Vol Up -> Format data -> firmware zip -> ROM zip -> GApps)
 - beryl pe 'fastboot reboot recovery' KABHI mat chalao (brick ho sakta hai). Reboot ke baad Volume Up daba ke recovery kholo.
 - Lunaris/LineageOS sirf HyperOS 3 se flash karo
 - Har flash ka log: ~/prateek_flash.log
@@ -918,7 +918,8 @@ echo -e " ${G}[10]${N} AUTO Custom ROM Flash (Note 14 5G)"
 echo -e " ${G}[11]${N} ROM ZIP flash bina recovery (payload.bin)"
 echo -e " ${G}[12]${N} ROM ki apni recovery + sideload"
 echo -e " ${G}[13]${N} GSI flash (system.img)"
-echo -e " ${G}[14]${N} Lunaris / LineageOS (beryl) - official steps"
+echo -e " ${C}---- Note 14 5G: Custom ROM FLASH (Recovery se) ----${N}"
+echo -e " ${G}[14]${N} Lunaris / LineageOS ROM FLASH (Recovery se) - Note 14 5G"
 [ -n "$TEST" ] && echo -e " ${Y}[E]${N} Fake error: $([ -n "$FAKE_ERR" ] && echo "${R}ON${N} (OFF karne ke liye E)" || echo "${G}OFF${N} (ON karne ke liye E)")"
 echo -e " ${R}[0]${N} Exit"
 read -rp $'\n Choose: ' c
