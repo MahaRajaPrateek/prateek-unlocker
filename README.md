@@ -38,6 +38,7 @@ Sound ke liye: Menu 1 (Setup) `play-audio` install karta hai (ya Termux:API app 
 11. ROM ZIP flash bina recovery (payload.bin)
 12. ROM ki apni recovery + sideload
 13. GSI flash (system.img)
+14. **Lunaris / LineageOS (beryl) – official steps**
 
 ## Redmi Note 14 5G (beryl) — recovery ke bina custom ROM
 
@@ -50,7 +51,7 @@ Beryl pe TWRP/OrangeFox available nahi hai, isliye option 7 aur 9 (recovery wala
 
 **[11] payload.bin:** ZIP se images nikalta hai (payload-dumper-go) → boot/dtbo/vbmeta/vendor_boot bootloader fastboot se (dono slot) → fastbootd mein reboot → system/vendor/product/odm flash → (optional format data) → reboot.
 
-**[12] ROM ki apni recovery:** ROM ki boot/vendor_boot/dtbo fastboot se flash → ROM ki recovery mein reboot → (Format data) → "Apply update > Apply from ADB" → tool ZIP sideload karta hai.
+**[12] ROM ki apni recovery:** ROM ki boot/vendor_boot/dtbo fastboot se flash (beryl pe dono slot, `--slot=all`) → normal reboot + tum Volume Up daba ke recovery kholte ho → (Format data) → "Apply update > Apply from ADB" → tool ZIP sideload karta hai.
 
 **[13] GSI:** vbmeta disable (stock vbmeta.img ya tool khud khali vbmeta banata hai) → fastbootd mein system.img flash → (format data) → reboot.
 
@@ -63,11 +64,33 @@ Har flash se pehle tool check karta hai:
 - fastbootd mein "not enough space" aaye to purani `-cow` / dusre slot ki partitions saaf karke ek baar dobara try
 - Har flash ka log: `~/prateek_flash.log`
 
+## LunarisAOSP / LineageOS on Note 14 5G
+
+> ⚠️ **beryl pe `fastboot reboot recovery` KABHI mat chalao — phone brick ho sakta hai.** Tool ye command beryl pe kabhi nahi bhejta: sirf `fastboot reboot`, aur tum reboot hote hi **Volume Up daba ke rakhte ho** → recovery khulti hai.
+>
+> ⚠️ **Sirf HyperOS 3 se flash karo** (ROM ke official notes).
+
+Option **[14]** ROM ke official steps bilkul isi order mein chalata hai (LunarisAOSP 3.12, LineageOS 23.2 unofficial, etc.). Files `/sdcard/Download` mein rakho: `vendor_boot.img`, `fw_beryl_global_xxxx.zip` (firmware), ROM zip, optional MindTheGapps zip.
+
+1. `fastboot flash vendor_boot --slot=all vendor_boot.img` (dono slot)
+2. `fastboot reboot` (reboot recovery **nahi**)
+3. Reboot hote hi Volume Up daba ke rakho → recovery
+4. Recovery mein **Format Data** (sara data delete)
+5. Apply update → Apply from ADB → `adb sideload fw_beryl_global_xxxx.zip`
+6. Apply from ADB → `adb sideload <ROM>.zip`
+7. Recovery "reboot to recovery?" puchhe → **Yes**
+8. Optional: Apply from ADB → GApps (MindTheGapps) sideload
+9. Reboot system
+
+Pehle tool check karta hai: HyperOS 3 confirm, bootloader unlocked, phone beryl/citrine hai, ROM/firmware ka codename match, vendor_boot ka header, zips valid hain; data-wipe ke liye `FORMAT` likhna padta hai. Koi bhi step fail → wahi ruk jata hai aur Hinglish mein batata hai kya karna hai.
+
+Option 9 (vendor_boot) aur 12 / AUTO 10 bhi ab beryl pe `--slot=all` se flash karte hain aur recovery ke liye sirf normal reboot + Volume Up.
+
 ## TEST MODE (`JARVIS TEST`)
 
 - Bada peela banner: "TEST MODE — koi phone flash nahi hoga"
 - Fastboot / adb / payload-dumper / Mi unlock sab nakli functions pe jaate hain (nakli unlocked beryl, slot a, "[TEST] ... OKAY")
-- `~/jarvis-test/` mein dummy ROM ban jaate hain: ek payload.bin wala (AUTO → 11), ek recovery images wala (AUTO → 12), ek GSI image (13)
+- `~/jarvis-test/` mein dummy ROM ban jaate hain: ek payload.bin wala (AUTO → 11), ek recovery images wala (AUTO → 12), ek GSI image (13), aur Lunaris set: vendor_boot + firmware + ROM + GApps (14)
 - Menu mein **[E] Fake error ON/OFF**: ON karke dekho ki error pe tool kaise rukta hai
 
 ## Safety
